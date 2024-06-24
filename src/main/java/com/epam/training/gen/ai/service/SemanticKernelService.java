@@ -9,38 +9,65 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.semantickernel.Kernel;
 import com.microsoft.semantickernel.orchestration.FunctionResult;
 import com.microsoft.semantickernel.orchestration.PromptExecutionSettings;
+import com.microsoft.semantickernel.services.chatcompletion.ChatCompletionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @Slf4j
 @RequiredArgsConstructor
 public class SemanticKernelService {
-    private final Kernel kernel;
+    private final ChatCompletionService.Builder chatCompletionServiceBuilder;
     private final ObjectMapper objectMapper;
 
-    public ChatBookResponse getJsonResponseWithSettings(ChatRequest chatRequest) {
-        log.info("Entering getJsonResponseWithSettings with input: {}", chatRequest.getInput());
-        String userInput = chatRequest.getInput();
-        PromptExecutionSettings settings = createPromptExecutionSettings(chatRequest);
+    public String getResponseWithSettings(ChatRequest chatRequest) {
+        Kernel kernel = buildKernel(chatRequest.getDeploymentName());
+        FunctionResult<Object> response = invokePrompt(kernel, chatRequest.getInput(), createPromptExecutionSettings(chatRequest));
+        String result = processResponse(response);
+        logTokenUsage(response);
+        return result;
+    }
 
-        FunctionResult<Object> response = kernel.invokePromptAsync(createJsonPrompt(userInput))
+    public ChatBookResponse getJsonResponseWithSettings(ChatRequest chatRequest) {
+        Kernel kernel = buildKernel(chatRequest.getDeploymentName());
+        FunctionResult<Object> response = invokePrompt(kernel, createJsonPrompt(chatRequest.getInput()), createPromptExecutionSettings(chatRequest));
+        String result = processResponse(response);
+        logTokenUsage(response);
+        return getChatBookResponse(result);
+    }
+
+    private Kernel buildKernel(String deploymentName) {
+        ChatCompletionService chatCompletionService = chatCompletionServiceBuilder
+                .withModelId(deploymentName)
+                .withDeploymentName(deploymentName)
+                .build();
+        return Kernel.builder()
+                .withAIService(ChatCompletionService.class, chatCompletionService)
+                .build();
+    }
+
+    private FunctionResult<Object> invokePrompt(Kernel kernel, String userInput, PromptExecutionSettings settings) {
+        return kernel.invokePromptAsync(userInput)
                 .withPromptExecutionSettings(settings)
                 .block();
+    }
 
-        String result = response.getResult().toString();
+    private String processResponse(FunctionResult<Object> response) {
+        String result = Objects.requireNonNull(response.getResult()).toString();
         log.info("Received result: {}", result);
+        return result;
+    }
 
+    private void logTokenUsage(FunctionResult<Object> response) {
         log.info("Usage: prompt tokens={}, completion tokens={}, total tokens={}",
-                response.getMetadata().getUsage().getPromptTokens(),
+                Objects.requireNonNull(response.getMetadata().getUsage()).getPromptTokens(),
                 response.getMetadata().getUsage().getCompletionTokens(),
                 response.getMetadata().getUsage().getTotalTokens());
-
-        return getChatBookResponse(result);
     }
 
     private String createJsonPrompt(String input) {
