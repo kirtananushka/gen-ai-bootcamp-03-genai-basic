@@ -5,28 +5,25 @@ import com.epam.training.gen.ai.dto.Deployment;
 import com.epam.training.gen.ai.dto.DeploymentList;
 import com.epam.training.gen.ai.exception.OpenAiException;
 import lombok.RequiredArgsConstructor;
-import org.apache.commons.lang3.BooleanUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class ModelService {
     private final AzureOpenAiClient azureOpenAiClient;
+
     @Value("${client-azureopenai-key}")
     private String clientAzureOpenAiKey;
 
     public List<String> getModels() {
-        DeploymentList response = azureOpenAiClient.getDeployments(clientAzureOpenAiKey);
-
-        if (BooleanUtils.isFalse(response != null)) {
-            throw new OpenAiException("Failed to get model list");
-        }
-
-        return Objects.requireNonNull(response).getData().stream()
+        return Optional.ofNullable(azureOpenAiClient.getDeployments(clientAzureOpenAiKey))
+                .map(DeploymentList::getData)
+                .orElseThrow(() -> new OpenAiException("Failed to get model list"))
+                .stream()
                 .map(Deployment::getModel)
                 .toList();
     }

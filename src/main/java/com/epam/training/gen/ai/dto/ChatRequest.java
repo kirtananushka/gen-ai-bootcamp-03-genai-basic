@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class ChatRequest {
 
-    @NotNull(message = "Input cannot be null")
+    @NotNull(message = "Prompt cannot be null")
     @JsonProperty("prompt")
     private String input;
 
